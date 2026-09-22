@@ -1,4 +1,5 @@
 #include "../include/executor.h"
+#include "../include/expander.h"
 
 // Check if command is a built-in
 int is_builtin(const char *cmd) {
@@ -56,6 +57,9 @@ int execute_command(Command *cmd) {
     if (cmd == NULL || cmd->count == 0) {
         return 1;
     }
+    
+    // Expand environment variables in arguments (respects single quotes)
+    expand_command(cmd);
     
     // Check if it's a built-in command
     if (is_builtin(cmd->args[0])) {

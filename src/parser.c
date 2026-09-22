@@ -5,10 +5,12 @@ int is_whitespace(char c) {
 }
 
 // Extract a single token, handling single quotes and backslash escapes
-char* extract_token_with_quotes(const char *input, int *pos) {
+// Sets was_quoted to 1 if token was enclosed in single quotes
+char* extract_token_with_quotes(const char *input, int *pos, int *was_quoted) {
     char buffer[1024];
     int buf_pos = 0;
     int i = *pos;
+    *was_quoted = 0;
     
     // Skip leading whitespace
     while (input[i] && is_whitespace(input[i])) {
@@ -24,6 +26,7 @@ char* extract_token_with_quotes(const char *input, int *pos) {
     while (input[i] && !is_whitespace(input[i])) {
         if (input[i] == '\'') {
             // Single quote: collect everything until closing quote
+            *was_quoted = 1;
             i++;  // skip opening quote
             while (input[i] && input[i] != '\'') {
                 buffer[buf_pos++] = input[i];
@@ -78,26 +81,32 @@ Command* parse_command(const char *input) {
     cmd->capacity = MAX_ARGS;
     cmd->count = 0;
     cmd->args = (char **)malloc(MAX_ARGS * sizeof(char *));
+    cmd->quoted = (int *)malloc(MAX_ARGS * sizeof(int));
     
-    if (cmd->args == NULL) {
+    if (cmd->args == NULL || cmd->quoted == NULL) {
         perror("malloc failed for args");
+        free(cmd->args);
+        free(cmd->quoted);
         free(cmd);
         return NULL;
     }
     
-    // Initialize all pointers to NULL
+    // Initialize all pointers to NULL and quoted flags to 0
     for (int i = 0; i < MAX_ARGS; i++) {
         cmd->args[i] = NULL;
+        cmd->quoted[i] = 0;
     }
     
     // Tokenize with quote and escape support
     int pos = 0;
     while (cmd->count < MAX_ARGS - 1) {
-        char *token = extract_token_with_quotes(input, &pos);
+        int was_quoted = 0;
+        char *token = extract_token_with_quotes(input, &pos, &was_quoted);
         if (token == NULL) {
             break;
         }
         cmd->args[cmd->count] = token;
+        cmd->quoted[cmd->count] = was_quoted;
         cmd->count++;
     }
     
@@ -115,7 +124,7 @@ void print_tokens(const Command *cmd) {
     
     printf("Tokens (%d):\n", cmd->count);
     for (int i = 0; i < cmd->count; i++) {
-        printf("  [%d] '%s'\n", i, cmd->args[i]);
+        printf("  [%d] '%s'%s\n", i, cmd->args[i], cmd->quoted[i] ? " (quoted)" : "");
     }
 }
 
@@ -130,5 +139,6 @@ void free_command(Command *cmd) {
         }
     }
     free(cmd->args);
+    free(cmd->quoted);
     free(cmd);
 }
