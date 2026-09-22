@@ -10,6 +10,7 @@
 
 // Function declarations
 int execute_command(Command *cmd);
+int execute_pipeline(Command **commands, int num_commands);
 int is_builtin(const char *cmd);
 int execute_builtin(Command *cmd);
 char* expand_cd_path(const char *path);

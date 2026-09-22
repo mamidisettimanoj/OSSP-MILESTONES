@@ -14,7 +14,6 @@ char* read_input_with_history(void) {
     int pos = 0;
     int c;
     
-    // Disable canonical mode to read arrow keys
     struct termios old_term, new_term;
     tcgetattr(STDIN_FILENO, &old_term);
     new_term = old_term;
@@ -24,12 +23,11 @@ char* read_input_with_history(void) {
     while (1) {
         c = getchar();
         
-        // Detect escape sequence for arrow keys
-        if (c == 27) {  // ESC character
+        if (c == 27) {
             int bracket = getchar();
             if (bracket == '[') {
                 int arrow = getchar();
-                if (arrow == 'A') {  // UP arrow
+                if (arrow == 'A') {
                     if (shell_history.current_index > 0) {
                         shell_history.current_index--;
                         char *hist_cmd = history_get(shell_history.current_index);
@@ -43,7 +41,7 @@ char* read_input_with_history(void) {
                         }
                     }
                     continue;
-                } else if (arrow == 'B') {  // DOWN arrow
+                } else if (arrow == 'B') {
                     if (shell_history.current_index < shell_history.count) {
                         shell_history.current_index++;
                         if (shell_history.current_index < shell_history.count) {
@@ -70,7 +68,6 @@ char* read_input_with_history(void) {
             continue;
         }
         
-        // Handle regular characters
         if (c == '\n') {
             printf("\n");
             buffer[pos] = '\0';
@@ -83,7 +80,7 @@ char* read_input_with_history(void) {
             }
             strcpy(input, buffer);
             return input;
-        } else if (c == 127) {  // Backspace
+        } else if (c == 127) {
             if (pos > 0) {
                 pos--;
                 printf("\b \b");
@@ -101,10 +98,6 @@ char* read_input_with_history(void) {
     return NULL;
 }
 
-int should_exit(const char *input) {
-    return (input != NULL && strcmp(input, "exit") == 0);
-}
-
 void run_shell(void) {
     history_init();
     
@@ -120,28 +113,23 @@ void run_shell(void) {
             break;
         }
         
-        // Skip empty lines
         if (strlen(input) == 0) {
             free(input);
             history_reset_index();
             continue;
         }
         
-        // Add to history
         history_add(input);
         
-        // Parse the command BEFORE checking for exit
-        Command *cmd = parse_command(input);
+        // Parse as pipeline (handles single commands and pipes)
+        int num_commands = 0;
+        Command **commands = parse_pipeline(input, &num_commands);
         
-        if (cmd && cmd->count > 0) {
-            // Execute the parsed command (exit built-in will call exit())
-            execute_command(cmd);
+        if (commands && num_commands > 0) {
+            execute_pipeline(commands, num_commands);
+            free_pipeline(commands, num_commands);
         } else {
             printf("Parse error or empty command\n");
-        }
-        
-        if (cmd) {
-            free_command(cmd);
         }
         
         history_reset_index();

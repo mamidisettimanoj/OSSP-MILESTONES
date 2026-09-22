@@ -4,15 +4,12 @@ int is_whitespace(char c) {
     return (c == ' ' || c == '\t' || c == '\n' || c == '\r');
 }
 
-// Extract a single token, handling single quotes and backslash escapes
-// Sets was_quoted to 1 if token was enclosed in single quotes
 char* extract_token_with_quotes(const char *input, int *pos, int *was_quoted) {
     char buffer[1024];
     int buf_pos = 0;
     int i = *pos;
     *was_quoted = 0;
     
-    // Skip leading whitespace
     while (input[i] && is_whitespace(input[i])) {
         i++;
     }
@@ -22,28 +19,24 @@ char* extract_token_with_quotes(const char *input, int *pos, int *was_quoted) {
         return NULL;
     }
     
-    // Read token character by character, handling quotes and escapes
-    while (input[i] && !is_whitespace(input[i])) {
+    while (input[i] && !is_whitespace(input[i]) && input[i] != '|') {
         if (input[i] == '\'') {
-            // Single quote: collect everything until closing quote
             *was_quoted = 1;
-            i++;  // skip opening quote
+            i++;
             while (input[i] && input[i] != '\'') {
                 buffer[buf_pos++] = input[i];
                 i++;
             }
             if (input[i] == '\'') {
-                i++;  // skip closing quote
+                i++;
             }
         } else if (input[i] == '\\') {
-            // Backslash: escape next character
-            i++;  // skip backslash
+            i++;
             if (input[i]) {
-                buffer[buf_pos++] = input[i];  // add escaped character literally
+                buffer[buf_pos++] = input[i];
                 i++;
             }
         } else {
-            // Regular character
             buffer[buf_pos++] = input[i];
             i++;
         }
@@ -57,7 +50,6 @@ char* extract_token_with_quotes(const char *input, int *pos, int *was_quoted) {
     buffer[buf_pos] = '\0';
     *pos = i;
     
-    // Allocate and return token
     char *token = (char *)malloc(buf_pos + 1);
     if (token == NULL) {
         perror("malloc failed for token");
@@ -91,13 +83,11 @@ Command* parse_command(const char *input) {
         return NULL;
     }
     
-    // Initialize all pointers to NULL and quoted flags to 0
     for (int i = 0; i < MAX_ARGS; i++) {
         cmd->args[i] = NULL;
         cmd->quoted[i] = 0;
     }
     
-    // Tokenize with quote and escape support
     int pos = 0;
     while (cmd->count < MAX_ARGS - 1) {
         int was_quoted = 0;
@@ -110,10 +100,77 @@ Command* parse_command(const char *input) {
         cmd->count++;
     }
     
-    // NULL-terminate the array (required for exec*)
     cmd->args[cmd->count] = NULL;
     
     return cmd;
+}
+
+// Parse input string by pipes and return array of commands
+Command** parse_pipeline(const char *input, int *num_commands) {
+    if (input == NULL || num_commands == NULL) {
+        return NULL;
+    }
+    
+    // Allocate array of command pointers
+    Command **commands = (Command **)malloc(MAX_COMMANDS * sizeof(Command *));
+    if (commands == NULL) {
+        perror("malloc failed for commands");
+        return NULL;
+    }
+    
+    *num_commands = 0;
+    int i = 0;
+    
+    while (input[i] && *num_commands < MAX_COMMANDS) {
+        // Find next pipe or end of string
+        int pipe_pos = i;
+        while (input[pipe_pos] && input[pipe_pos] != '|') {
+            // Skip quoted sections to avoid splitting on pipes inside quotes
+            if (input[pipe_pos] == '\'') {
+                pipe_pos++;
+                while (input[pipe_pos] && input[pipe_pos] != '\'') {
+                    pipe_pos++;
+                }
+                if (input[pipe_pos] == '\'') {
+                    pipe_pos++;
+                }
+            } else {
+                pipe_pos++;
+            }
+        }
+        
+        // Extract substring from i to pipe_pos
+        int cmd_len = pipe_pos - i;
+        char *cmd_str = (char *)malloc(cmd_len + 1);
+        if (cmd_str == NULL) {
+            perror("malloc failed for cmd_str");
+            free(commands);
+            return NULL;
+        }
+        
+        strncpy(cmd_str, &input[i], cmd_len);
+        cmd_str[cmd_len] = '\0';
+        
+        // Parse this command
+        Command *cmd = parse_command(cmd_str);
+        free(cmd_str);
+        
+        if (cmd && cmd->count > 0) {
+            commands[*num_commands] = cmd;
+            (*num_commands)++;
+        } else if (cmd) {
+            free_command(cmd);
+        }
+        
+        // Skip pipe character if present
+        if (input[pipe_pos] == '|') {
+            i = pipe_pos + 1;
+        } else {
+            break;
+        }
+    }
+    
+    return commands;
 }
 
 void print_tokens(const Command *cmd) {
@@ -141,4 +198,15 @@ void free_command(Command *cmd) {
     free(cmd->args);
     free(cmd->quoted);
     free(cmd);
+}
+
+void free_pipeline(Command **commands, int num_commands) {
+    if (commands == NULL) {
+        return;
+    }
+    
+    for (int i = 0; i < num_commands; i++) {
+        free_command(commands[i]);
+    }
+    free(commands);
 }

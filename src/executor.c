@@ -3,7 +3,6 @@
 #include "../include/history.h"
 #include <libgen.h>
 
-// Track previous directory for cd -
 static char previous_dir[1024] = "";
 
 int is_absolute_path(const char *path) {
@@ -17,7 +16,6 @@ char* expand_cd_path(const char *path) {
     
     char buffer[2048];
     
-    // Handle ~ (home directory)
     if (path[0] == '~') {
         const char *home = getenv("HOME");
         if (home == NULL) {
@@ -57,7 +55,6 @@ char* expand_cd_path(const char *path) {
     return result;
 }
 
-// Check if command is a built-in
 int is_builtin(const char *cmd) {
     if (cmd == NULL) return 0;
     
@@ -70,11 +67,9 @@ int is_builtin(const char *cmd) {
     return 0;
 }
 
-// Execute history built-in
 int execute_builtin_history(Command *cmd) {
     int start_index = 0;
     
-    // If argument provided, show last N commands
     if (cmd->count > 1) {
         int num_commands = atoi(cmd->args[1]);
         if (num_commands > 0) {
@@ -85,7 +80,6 @@ int execute_builtin_history(Command *cmd) {
         }
     }
     
-    // Print history from start_index to end
     for (int i = start_index; i < shell_history.count; i++) {
         printf("%3d  %s\n", i, shell_history.commands[i]);
     }
@@ -93,7 +87,6 @@ int execute_builtin_history(Command *cmd) {
     return 0;
 }
 
-// Execute built-in commands
 int execute_builtin(Command *cmd) {
     if (cmd == NULL || cmd->count == 0) {
         return 1;
@@ -101,7 +94,6 @@ int execute_builtin(Command *cmd) {
     
     const char *builtin = cmd->args[0];
     
-    // pwd: print working directory
     if (strcmp(builtin, "pwd") == 0) {
         char cwd[1024];
         if (getcwd(cwd, sizeof(cwd)) != NULL) {
@@ -113,7 +105,6 @@ int execute_builtin(Command *cmd) {
         return 0;
     }
     
-    // cd: change directory
     if (strcmp(builtin, "cd") == 0) {
         const char *target = NULL;
         
@@ -147,7 +138,6 @@ int execute_builtin(Command *cmd) {
         return 0;
     }
     
-    // exit: exit shell with optional status code
     if (strcmp(builtin, "exit") == 0) {
         int status = 0;
         
@@ -160,44 +150,118 @@ int execute_builtin(Command *cmd) {
         return 0;
     }
     
-    // history: display command history
     if (strcmp(builtin, "history") == 0) {
         return execute_builtin_history(cmd);
     }
     
-    // Other built-ins not yet implemented
     printf("Built-in '%s' not yet implemented\n", builtin);
     return 1;
 }
 
-// Execute external command via fork/exec/wait
+// Execute a pipeline of commands
+int execute_pipeline(Command **commands, int num_commands) {
+    if (commands == NULL || num_commands == 0) {
+        return 1;
+    }
+    
+    // For single command, just execute it normally
+    if (num_commands == 1) {
+        return execute_command(commands[0]);
+    }
+    
+    // Expand variables in all commands first
+    for (int i = 0; i < num_commands; i++) {
+        expand_command(commands[i]);
+    }
+    
+    // Array to store child PIDs
+    pid_t pids[num_commands];
+    int pipes[num_commands - 1][2];  // Array of pipes
+    
+    // Create all pipes first
+    for (int i = 0; i < num_commands - 1; i++) {
+        if (pipe(pipes[i]) == -1) {
+            perror("pipe failed");
+            return 1;
+        }
+    }
+    
+    // Fork and execute each command
+    for (int i = 0; i < num_commands; i++) {
+        pid_t pid = fork();
+        
+        if (pid < 0) {
+            perror("fork failed");
+            return 1;
+        } else if (pid == 0) {
+            // Child process
+            
+            // Connect stdin from previous pipe (if not first command)
+            if (i > 0) {
+                dup2(pipes[i-1][0], STDIN_FILENO);
+            }
+            
+            // Connect stdout to next pipe (if not last command)
+            if (i < num_commands - 1) {
+                dup2(pipes[i][1], STDOUT_FILENO);
+            }
+            
+            // Close all pipe file descriptors in child
+            for (int j = 0; j < num_commands - 1; j++) {
+                close(pipes[j][0]);
+                close(pipes[j][1]);
+            }
+            
+            // Execute the command
+            execvp(commands[i]->args[0], commands[i]->args);
+            perror("execvp failed");
+            exit(127);
+        } else {
+            // Parent process
+            pids[i] = pid;
+        }
+    }
+    
+    // Parent: close all pipes and wait for children
+    for (int i = 0; i < num_commands - 1; i++) {
+        close(pipes[i][0]);
+        close(pipes[i][1]);
+    }
+    
+    // Wait for all children to finish
+    int status = 0;
+    for (int i = 0; i < num_commands; i++) {
+        int child_status;
+        waitpid(pids[i], &child_status, 0);
+        if (i == num_commands - 1) {  // Get status from last command
+            status = WIFEXITED(child_status) ? WEXITSTATUS(child_status) : 1;
+        }
+    }
+    
+    return status;
+}
+
 int execute_command(Command *cmd) {
     if (cmd == NULL || cmd->count == 0) {
         return 1;
     }
     
-    // Expand environment variables in arguments (respects single quotes)
     expand_command(cmd);
     
-    // Check if it's a built-in command
     if (is_builtin(cmd->args[0])) {
         return execute_builtin(cmd);
     }
     
-    // Fork a child process
     pid_t pid = fork();
     
     if (pid < 0) {
         perror("fork failed");
         return 1;
     } else if (pid == 0) {
-        // Child process: execute the command
         execvp(cmd->args[0], cmd->args);
-        
         perror("execvp failed");
         exit(127);
     } else {
-        // Parent process: wait for child to finish
         int status;
         waitpid(pid, &status, 0);
         
