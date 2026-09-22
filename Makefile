@@ -1,10 +1,17 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -g
+CFLAGS = -Wall -Wextra -g -I./include
 
-all: src/session1
+TARGETS = src/session1 src/shell
+
+all: $(TARGETS)
 
 src/session1: src/session1.c
 	$(CC) $(CFLAGS) -o src/session1 src/session1.c
 
+src/shell: src/shell.c
+	$(CC) $(CFLAGS) -o src/shell src/shell.c
+
 clean:
-	rm -f src/session1
+	rm -f $(TARGETS)
+
+.PHONY: all clean
