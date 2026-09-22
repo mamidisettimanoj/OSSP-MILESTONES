@@ -12,5 +12,7 @@
 int execute_command(Command *cmd);
 int is_builtin(const char *cmd);
 int execute_builtin(Command *cmd);
+char* expand_cd_path(const char *path);
+int is_absolute_path(const char *path);
 
 #endif

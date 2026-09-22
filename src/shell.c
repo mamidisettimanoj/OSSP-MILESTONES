@@ -130,17 +130,11 @@ void run_shell(void) {
         // Add to history
         history_add(input);
         
-        // Check for exit
-        if (should_exit(input)) {
-            printf("Goodbye!\n");
-            free(input);
-            break;
-        }
-        
-        // Parse the command
+        // Parse the command BEFORE checking for exit
         Command *cmd = parse_command(input);
+        
         if (cmd && cmd->count > 0) {
-            // Execute the parsed command
+            // Execute the parsed command (exit built-in will call exit())
             execute_command(cmd);
         } else {
             printf("Parse error or empty command\n");
