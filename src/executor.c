@@ -1,5 +1,6 @@
 #include "../include/executor.h"
 #include "../include/expander.h"
+#include "../include/history.h"
 #include <libgen.h>
 
 // Track previous directory for cd -
@@ -14,7 +15,7 @@ char* expand_cd_path(const char *path) {
         return NULL;
     }
     
-    char buffer[2048];  // Larger buffer to prevent truncation
+    char buffer[2048];
     
     // Handle ~ (home directory)
     if (path[0] == '~') {
@@ -24,27 +25,21 @@ char* expand_cd_path(const char *path) {
         }
         
         if (path[1] == '\0') {
-            // Just ~ → home directory
             strcpy(buffer, home);
         } else if (path[1] == '/') {
-            // ~/something → home/something
             snprintf(buffer, sizeof(buffer), "%s%s", home, &path[1]);
         } else {
-            // ~user/something (not implemented, just return as-is)
             strcpy(buffer, path);
         }
     } else if (is_absolute_path(path)) {
-        // Absolute path, use as-is
         strcpy(buffer, path);
     } else if (strcmp(path, "-") == 0) {
-        // cd - → go to previous directory
         if (previous_dir[0] == '\0') {
             fprintf(stderr, "cd: OLDPWD not set\n");
             return NULL;
         }
         strcpy(buffer, previous_dir);
     } else {
-        // Relative path: prepend current directory
         char cwd[1024];
         if (getcwd(cwd, sizeof(cwd)) == NULL) {
             perror("getcwd");
@@ -53,7 +48,6 @@ char* expand_cd_path(const char *path) {
         snprintf(buffer, sizeof(buffer), "%s/%s", cwd, path);
     }
     
-    // Allocate and return
     char *result = (char *)malloc(strlen(buffer) + 1);
     if (result == NULL) {
         perror("malloc failed");
@@ -72,6 +66,29 @@ int is_builtin(const char *cmd) {
     if (strcmp(cmd, "exit") == 0) return 1;
     if (strcmp(cmd, "export") == 0) return 1;
     if (strcmp(cmd, "history") == 0) return 1;
+    
+    return 0;
+}
+
+// Execute history built-in
+int execute_builtin_history(Command *cmd) {
+    int start_index = 0;
+    
+    // If argument provided, show last N commands
+    if (cmd->count > 1) {
+        int num_commands = atoi(cmd->args[1]);
+        if (num_commands > 0) {
+            start_index = shell_history.count - num_commands;
+            if (start_index < 0) {
+                start_index = 0;
+            }
+        }
+    }
+    
+    // Print history from start_index to end
+    for (int i = start_index; i < shell_history.count; i++) {
+        printf("%3d  %s\n", i, shell_history.commands[i]);
+    }
     
     return 0;
 }
@@ -100,9 +117,7 @@ int execute_builtin(Command *cmd) {
     if (strcmp(builtin, "cd") == 0) {
         const char *target = NULL;
         
-        // Determine target directory
         if (cmd->count < 2) {
-            // No argument: go to home
             target = getenv("HOME");
             if (target == NULL) {
                 fprintf(stderr, "cd: HOME not set\n");
@@ -112,19 +127,16 @@ int execute_builtin(Command *cmd) {
             target = cmd->args[1];
         }
         
-        // Expand the path
         char *expanded = expand_cd_path(target);
         if (expanded == NULL) {
             return 1;
         }
         
-        // Save current directory before changing
         char current_dir[1024];
         if (getcwd(current_dir, sizeof(current_dir)) != NULL) {
             strcpy(previous_dir, current_dir);
         }
         
-        // Change directory
         if (chdir(expanded) != 0) {
             perror("cd failed");
             free(expanded);
@@ -145,7 +157,12 @@ int execute_builtin(Command *cmd) {
         
         printf("Goodbye!\n");
         exit(status);
-        return 0;  // Never reached
+        return 0;
+    }
+    
+    // history: display command history
+    if (strcmp(builtin, "history") == 0) {
+        return execute_builtin_history(cmd);
     }
     
     // Other built-ins not yet implemented
@@ -175,18 +192,15 @@ int execute_command(Command *cmd) {
         return 1;
     } else if (pid == 0) {
         // Child process: execute the command
-        // cmd->args is already NULL-terminated by parse_command()
         execvp(cmd->args[0], cmd->args);
         
-        // execvp only returns if there's an error
         perror("execvp failed");
-        exit(127);  // Command not found
+        exit(127);
     } else {
         // Parent process: wait for child to finish
         int status;
         waitpid(pid, &status, 0);
         
-        // Check if child exited normally
         if (WIFEXITED(status)) {
             return WEXITSTATUS(status);
         } else {
