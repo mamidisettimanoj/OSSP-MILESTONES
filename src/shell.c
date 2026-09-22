@@ -1,5 +1,6 @@
 #include "../include/shell.h"
 #include "../include/history.h"
+#include "../include/parser.h"
 #include <termios.h>
 
 void display_prompt(void) {
@@ -32,7 +33,6 @@ char* read_input_with_history(void) {
                         shell_history.current_index--;
                         char *hist_cmd = history_get(shell_history.current_index);
                         if (hist_cmd != NULL) {
-                            // Clear current line and display history
                             printf("\r");
                             printf("shell> ");
                             printf("%s", hist_cmd);
@@ -56,7 +56,6 @@ char* read_input_with_history(void) {
                                 fflush(stdout);
                             }
                         } else {
-                            // At end of history, show empty
                             printf("\r");
                             printf("shell> ");
                             buffer[0] = '\0';
@@ -137,8 +136,18 @@ void run_shell(void) {
             break;
         }
         
-        // Placeholder: command execution
-        printf("Command received: %s (not yet implemented)\n", input);
+        // Parse the command
+        Command *cmd = parse_command(input);
+        if (cmd && cmd->count > 0) {
+            print_tokens(cmd);
+        } else {
+            printf("Parse error or empty command\n");
+        }
+        
+        if (cmd) {
+            free_command(cmd);
+        }
+        
         history_reset_index();
         free(input);
     }
