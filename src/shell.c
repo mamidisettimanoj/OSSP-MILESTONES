@@ -1,6 +1,7 @@
 #include "../include/shell.h"
 #include "../include/history.h"
 #include "../include/parser.h"
+#include "../include/executor.h"
 #include <termios.h>
 
 void display_prompt(void) {
@@ -139,7 +140,8 @@ void run_shell(void) {
         // Parse the command
         Command *cmd = parse_command(input);
         if (cmd && cmd->count > 0) {
-            print_tokens(cmd);
+            // Execute the parsed command
+            execute_command(cmd);
         } else {
             printf("Parse error or empty command\n");
         }
