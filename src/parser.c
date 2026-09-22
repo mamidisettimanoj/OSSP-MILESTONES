@@ -4,6 +4,66 @@ int is_whitespace(char c) {
     return (c == ' ' || c == '\t' || c == '\n' || c == '\r');
 }
 
+// Extract a single token, handling single quotes and backslash escapes
+char* extract_token_with_quotes(const char *input, int *pos) {
+    char buffer[1024];
+    int buf_pos = 0;
+    int i = *pos;
+    
+    // Skip leading whitespace
+    while (input[i] && is_whitespace(input[i])) {
+        i++;
+    }
+    
+    if (!input[i]) {
+        *pos = i;
+        return NULL;
+    }
+    
+    // Read token character by character, handling quotes and escapes
+    while (input[i] && !is_whitespace(input[i])) {
+        if (input[i] == '\'') {
+            // Single quote: collect everything until closing quote
+            i++;  // skip opening quote
+            while (input[i] && input[i] != '\'') {
+                buffer[buf_pos++] = input[i];
+                i++;
+            }
+            if (input[i] == '\'') {
+                i++;  // skip closing quote
+            }
+        } else if (input[i] == '\\') {
+            // Backslash: escape next character
+            i++;  // skip backslash
+            if (input[i]) {
+                buffer[buf_pos++] = input[i];  // add escaped character literally
+                i++;
+            }
+        } else {
+            // Regular character
+            buffer[buf_pos++] = input[i];
+            i++;
+        }
+    }
+    
+    if (buf_pos == 0) {
+        *pos = i;
+        return NULL;
+    }
+    
+    buffer[buf_pos] = '\0';
+    *pos = i;
+    
+    // Allocate and return token
+    char *token = (char *)malloc(buf_pos + 1);
+    if (token == NULL) {
+        perror("malloc failed for token");
+        return NULL;
+    }
+    strcpy(token, buffer);
+    return token;
+}
+
 Command* parse_command(const char *input) {
     if (input == NULL) {
         return NULL;
@@ -30,42 +90,13 @@ Command* parse_command(const char *input) {
         cmd->args[i] = NULL;
     }
     
-    // Skip leading whitespace
-    int i = 0;
-    while (input[i] && is_whitespace(input[i])) {
-        i++;
-    }
-    
-    // Tokenize
-    while (input[i] && cmd->count < MAX_ARGS - 1) {
-        // Skip whitespace between tokens
-        while (input[i] && is_whitespace(input[i])) {
-            i++;
-        }
-        
-        if (!input[i]) {
+    // Tokenize with quote and escape support
+    int pos = 0;
+    while (cmd->count < MAX_ARGS - 1) {
+        char *token = extract_token_with_quotes(input, &pos);
+        if (token == NULL) {
             break;
         }
-        
-        // Find end of token
-        int start = i;
-        while (input[i] && !is_whitespace(input[i])) {
-            i++;
-        }
-        int end = i;
-        
-        // Extract token
-        int token_len = end - start;
-        char *token = (char *)malloc(token_len + 1);
-        if (token == NULL) {
-            perror("malloc failed for token");
-            free_command(cmd);
-            return NULL;
-        }
-        
-        strncpy(token, &input[start], token_len);
-        token[token_len] = '\0';
-        
         cmd->args[cmd->count] = token;
         cmd->count++;
     }

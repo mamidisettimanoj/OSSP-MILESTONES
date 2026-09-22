@@ -19,5 +19,6 @@ Command* parse_command(const char *input);
 void print_tokens(const Command *cmd);
 void free_command(Command *cmd);
 int is_whitespace(char c);
+char* extract_token_with_quotes(const char *input, int *pos);
 
 #endif
