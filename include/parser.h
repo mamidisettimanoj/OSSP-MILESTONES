@@ -12,11 +12,11 @@
 
 typedef enum {
     REDIRECT_NONE,
-    REDIRECT_IN,      // 
-    REDIRECT_OUT,     // >
-    REDIRECT_APPEND,  // >>
-    REDIRECT_ERR,     // 2>
-    REDIRECT_ERR_APPEND, // 2>>
+    REDIRECT_IN,
+    REDIRECT_OUT,
+    REDIRECT_APPEND,
+    REDIRECT_ERR,
+    REDIRECT_ERR_APPEND,
 } RedirectType;
 
 typedef struct {
@@ -31,6 +31,7 @@ typedef struct {
     int capacity;
     Redirection *redirects;
     int num_redirects;
+    int is_background;  // NEW: true if command ends with &
 } Command;
 
 // Function declarations

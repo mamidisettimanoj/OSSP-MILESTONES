@@ -1,6 +1,7 @@
 #include "../include/executor.h"
 #include "../include/expander.h"
 #include "../include/history.h"
+#include "../include/job.h"
 #include <libgen.h>
 
 static char previous_dir[1024] = "";
@@ -132,6 +133,7 @@ int is_builtin(const char *cmd) {
     if (strcmp(cmd, "exit") == 0) return 1;
     if (strcmp(cmd, "export") == 0) return 1;
     if (strcmp(cmd, "history") == 0) return 1;
+    if (strcmp(cmd, "jobs") == 0) return 1;
     
     return 0;
 }
@@ -223,6 +225,11 @@ int execute_builtin(Command *cmd) {
         return execute_builtin_history(cmd);
     }
     
+    if (strcmp(builtin, "jobs") == 0) {
+        print_jobs();
+        return 0;
+    }
+    
     printf("Built-in '%s' not yet implemented\n", builtin);
     return 1;
 }
@@ -231,6 +238,9 @@ int execute_pipeline(Command **commands, int num_commands) {
     if (commands == NULL || num_commands == 0) {
         return 1;
     }
+    
+    // Check if last command is background
+    int is_background = (commands[num_commands - 1]->is_background);
     
     if (num_commands == 1) {
         return execute_command(commands[0]);
@@ -288,11 +298,31 @@ int execute_pipeline(Command **commands, int num_commands) {
     }
     
     int status = 0;
-    for (int i = 0; i < num_commands; i++) {
-        int child_status;
-        waitpid(pids[i], &child_status, 0);
-        if (i == num_commands - 1) {
-            status = WIFEXITED(child_status) ? WEXITSTATUS(child_status) : 1;
+    
+    if (is_background) {
+        // Background: add to job table and return immediately
+        char cmd_str[1024] = "";
+        for (int i = 0; i < num_commands; i++) {
+            for (int j = 0; j < commands[i]->count; j++) {
+                strcat(cmd_str, commands[i]->args[j]);
+                if (j < commands[i]->count - 1) {
+                    strcat(cmd_str, " ");
+                }
+            }
+            if (i < num_commands - 1) {
+                strcat(cmd_str, " | ");
+            }
+        }
+        add_job(pids[num_commands - 1], cmd_str);
+        status = 0;
+    } else {
+        // Foreground: wait for all children
+        for (int i = 0; i < num_commands; i++) {
+            int child_status;
+            waitpid(pids[i], &child_status, 0);
+            if (i == num_commands - 1) {
+                status = WIFEXITED(child_status) ? WEXITSTATUS(child_status) : 1;
+            }
         }
     }
     
@@ -324,13 +354,27 @@ int execute_command(Command *cmd) {
         perror("execvp failed");
         exit(127);
     } else {
-        int status;
-        waitpid(pid, &status, 0);
-        
-        if (WIFEXITED(status)) {
-            return WEXITSTATUS(status);
+        if (cmd->is_background) {
+            // Background job: add to table and return
+            char cmd_str[1024] = "";
+            for (int i = 0; i < cmd->count; i++) {
+                strcat(cmd_str, cmd->args[i]);
+                if (i < cmd->count - 1) {
+                    strcat(cmd_str, " ");
+                }
+            }
+            add_job(pid, cmd_str);
+            return 0;
         } else {
-            return 1;
+            // Foreground: wait for child
+            int status;
+            waitpid(pid, &status, 0);
+            
+            if (WIFEXITED(status)) {
+                return WEXITSTATUS(status);
+            } else {
+                return 1;
+            }
         }
     }
 }

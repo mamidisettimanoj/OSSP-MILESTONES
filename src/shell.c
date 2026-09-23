@@ -2,6 +2,7 @@
 #include "../include/history.h"
 #include "../include/parser.h"
 #include "../include/executor.h"
+#include "../include/job.h"
 #include <termios.h>
 
 void display_prompt(void) {
@@ -100,11 +101,15 @@ char* read_input_with_history(void) {
 
 void run_shell(void) {
     history_init();
+    job_table_init();
     
     printf("ShellForge - Simple Unix Shell\n");
     printf("Type 'exit' to quit. Use UP/DOWN arrows for history.\n\n");
     
     while (1) {
+        // Check for finished background jobs
+        check_background_jobs();
+        
         display_prompt();
         char *input = read_input_with_history();
         
@@ -121,7 +126,6 @@ void run_shell(void) {
         
         history_add(input);
         
-        // Parse as pipeline (handles single commands and pipes)
         int num_commands = 0;
         Command **commands = parse_pipeline(input, &num_commands);
         

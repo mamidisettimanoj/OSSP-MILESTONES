@@ -19,7 +19,7 @@ char* extract_token_with_quotes(const char *input, int *pos, int *was_quoted) {
         return NULL;
     }
     
-    while (input[i] && !is_whitespace(input[i]) && input[i] != '|' && input[i] != '<' && input[i] != '>') {
+    while (input[i] && !is_whitespace(input[i]) && input[i] != '|' && input[i] != '<' && input[i] != '>' && input[i] != '&') {
         if (input[i] == '\'') {
             *was_quoted = 1;
             i++;
@@ -76,6 +76,7 @@ Command* parse_command(const char *input) {
     cmd->quoted = (int *)malloc(MAX_ARGS * sizeof(int));
     cmd->redirects = (Redirection *)malloc(MAX_REDIRECTS * sizeof(Redirection));
     cmd->num_redirects = 0;
+    cmd->is_background = 0;  // Initialize to foreground
     
     if (cmd->args == NULL || cmd->quoted == NULL || cmd->redirects == NULL) {
         perror("malloc failed for args");
@@ -99,6 +100,20 @@ Command* parse_command(const char *input) {
         
         if (!input[pos]) break;
         
+        // Check for & (background operator)
+        if (input[pos] == '&') {
+            pos++;
+            // Skip trailing whitespace to ensure & is at end
+            while (input[pos] && is_whitespace(input[pos])) {
+                pos++;
+            }
+            if (!input[pos]) {
+                // & is at end of command
+                cmd->is_background = 1;
+            }
+            break;
+        }
+        
         if (input[pos] == '>') {
             if (cmd->num_redirects >= MAX_REDIRECTS) break;
             
@@ -115,7 +130,7 @@ Command* parse_command(const char *input) {
             }
             
             int filename_start = pos;
-            while (input[pos] && !is_whitespace(input[pos]) && input[pos] != '>' && input[pos] != '<') {
+            while (input[pos] && !is_whitespace(input[pos]) && input[pos] != '>' && input[pos] != '<' && input[pos] != '&') {
                 pos++;
             }
             
@@ -143,7 +158,7 @@ Command* parse_command(const char *input) {
             }
             
             int filename_start = pos;
-            while (input[pos] && !is_whitespace(input[pos]) && input[pos] != '>' && input[pos] != '<') {
+            while (input[pos] && !is_whitespace(input[pos]) && input[pos] != '>' && input[pos] != '<' && input[pos] != '&') {
                 pos++;
             }
             
@@ -177,7 +192,7 @@ Command* parse_command(const char *input) {
             }
             
             int filename_start = pos;
-            while (input[pos] && !is_whitespace(input[pos]) && input[pos] != '>' && input[pos] != '<') {
+            while (input[pos] && !is_whitespace(input[pos]) && input[pos] != '>' && input[pos] != '<' && input[pos] != '&') {
                 pos++;
             }
             
@@ -301,6 +316,10 @@ void print_tokens(const Command *cmd) {
             }
             printf("  %s %s\n", type_str, cmd->redirects[i].filename);
         }
+    }
+    
+    if (cmd->is_background) {
+        printf("Background: yes (&)\n");
     }
 }
 
