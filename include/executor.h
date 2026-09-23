@@ -5,6 +5,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <string.h>
 #include "parser.h"
 
@@ -15,5 +18,6 @@ int is_builtin(const char *cmd);
 int execute_builtin(Command *cmd);
 char* expand_cd_path(const char *path);
 int is_absolute_path(const char *path);
+int setup_redirections(Command *cmd);
 
 #endif

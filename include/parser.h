@@ -8,12 +8,29 @@
 
 #define MAX_ARGS 64
 #define MAX_COMMANDS 16
+#define MAX_REDIRECTS 8
+
+typedef enum {
+    REDIRECT_NONE,
+    REDIRECT_IN,      // 
+    REDIRECT_OUT,     // >
+    REDIRECT_APPEND,  // >>
+    REDIRECT_ERR,     // 2>
+    REDIRECT_ERR_APPEND, // 2>>
+} RedirectType;
+
+typedef struct {
+    RedirectType type;
+    char *filename;
+} Redirection;
 
 typedef struct {
     char **args;
     int *quoted;
     int count;
     int capacity;
+    Redirection *redirects;
+    int num_redirects;
 } Command;
 
 // Function declarations

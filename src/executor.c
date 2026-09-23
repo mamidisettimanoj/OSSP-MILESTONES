@@ -55,6 +55,75 @@ char* expand_cd_path(const char *path) {
     return result;
 }
 
+int setup_redirections(Command *cmd) {
+    if (cmd == NULL || cmd->num_redirects == 0) {
+        return 0;
+    }
+    
+    for (int i = 0; i < cmd->num_redirects; i++) {
+        Redirection *redir = &cmd->redirects[i];
+        int fd = -1;
+        mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+        
+        switch (redir->type) {
+            case REDIRECT_IN:
+                fd = open(redir->filename, O_RDONLY);
+                if (fd < 0) {
+                    perror("open");
+                    return 1;
+                }
+                dup2(fd, STDIN_FILENO);
+                close(fd);
+                break;
+                
+            case REDIRECT_OUT:
+                fd = open(redir->filename, O_WRONLY | O_CREAT | O_TRUNC, mode);
+                if (fd < 0) {
+                    perror("open");
+                    return 1;
+                }
+                dup2(fd, STDOUT_FILENO);
+                close(fd);
+                break;
+                
+            case REDIRECT_APPEND:
+                fd = open(redir->filename, O_WRONLY | O_CREAT | O_APPEND, mode);
+                if (fd < 0) {
+                    perror("open");
+                    return 1;
+                }
+                dup2(fd, STDOUT_FILENO);
+                close(fd);
+                break;
+                
+            case REDIRECT_ERR:
+                fd = open(redir->filename, O_WRONLY | O_CREAT | O_TRUNC, mode);
+                if (fd < 0) {
+                    perror("open");
+                    return 1;
+                }
+                dup2(fd, STDERR_FILENO);
+                close(fd);
+                break;
+                
+            case REDIRECT_ERR_APPEND:
+                fd = open(redir->filename, O_WRONLY | O_CREAT | O_APPEND, mode);
+                if (fd < 0) {
+                    perror("open");
+                    return 1;
+                }
+                dup2(fd, STDERR_FILENO);
+                close(fd);
+                break;
+                
+            default:
+                break;
+        }
+    }
+    
+    return 0;
+}
+
 int is_builtin(const char *cmd) {
     if (cmd == NULL) return 0;
     
@@ -158,27 +227,22 @@ int execute_builtin(Command *cmd) {
     return 1;
 }
 
-// Execute a pipeline of commands
 int execute_pipeline(Command **commands, int num_commands) {
     if (commands == NULL || num_commands == 0) {
         return 1;
     }
     
-    // For single command, just execute it normally
     if (num_commands == 1) {
         return execute_command(commands[0]);
     }
     
-    // Expand variables in all commands first
     for (int i = 0; i < num_commands; i++) {
         expand_command(commands[i]);
     }
     
-    // Array to store child PIDs
     pid_t pids[num_commands];
-    int pipes[num_commands - 1][2];  // Array of pipes
+    int pipes[num_commands - 1][2];
     
-    // Create all pipes first
     for (int i = 0; i < num_commands - 1; i++) {
         if (pipe(pipes[i]) == -1) {
             perror("pipe failed");
@@ -186,7 +250,6 @@ int execute_pipeline(Command **commands, int num_commands) {
         }
     }
     
-    // Fork and execute each command
     for (int i = 0; i < num_commands; i++) {
         pid_t pid = fork();
         
@@ -194,46 +257,41 @@ int execute_pipeline(Command **commands, int num_commands) {
             perror("fork failed");
             return 1;
         } else if (pid == 0) {
-            // Child process
-            
-            // Connect stdin from previous pipe (if not first command)
             if (i > 0) {
                 dup2(pipes[i-1][0], STDIN_FILENO);
             }
             
-            // Connect stdout to next pipe (if not last command)
             if (i < num_commands - 1) {
                 dup2(pipes[i][1], STDOUT_FILENO);
             }
             
-            // Close all pipe file descriptors in child
             for (int j = 0; j < num_commands - 1; j++) {
                 close(pipes[j][0]);
                 close(pipes[j][1]);
             }
             
-            // Execute the command
+            if (setup_redirections(commands[i]) != 0) {
+                exit(1);
+            }
+            
             execvp(commands[i]->args[0], commands[i]->args);
             perror("execvp failed");
             exit(127);
         } else {
-            // Parent process
             pids[i] = pid;
         }
     }
     
-    // Parent: close all pipes and wait for children
     for (int i = 0; i < num_commands - 1; i++) {
         close(pipes[i][0]);
         close(pipes[i][1]);
     }
     
-    // Wait for all children to finish
     int status = 0;
     for (int i = 0; i < num_commands; i++) {
         int child_status;
         waitpid(pids[i], &child_status, 0);
-        if (i == num_commands - 1) {  // Get status from last command
+        if (i == num_commands - 1) {
             status = WIFEXITED(child_status) ? WEXITSTATUS(child_status) : 1;
         }
     }
@@ -258,6 +316,10 @@ int execute_command(Command *cmd) {
         perror("fork failed");
         return 1;
     } else if (pid == 0) {
+        if (setup_redirections(cmd) != 0) {
+            exit(1);
+        }
+        
         execvp(cmd->args[0], cmd->args);
         perror("execvp failed");
         exit(127);

@@ -19,7 +19,7 @@ char* extract_token_with_quotes(const char *input, int *pos, int *was_quoted) {
         return NULL;
     }
     
-    while (input[i] && !is_whitespace(input[i]) && input[i] != '|') {
+    while (input[i] && !is_whitespace(input[i]) && input[i] != '|' && input[i] != '<' && input[i] != '>') {
         if (input[i] == '\'') {
             *was_quoted = 1;
             i++;
@@ -74,11 +74,14 @@ Command* parse_command(const char *input) {
     cmd->count = 0;
     cmd->args = (char **)malloc(MAX_ARGS * sizeof(char *));
     cmd->quoted = (int *)malloc(MAX_ARGS * sizeof(int));
+    cmd->redirects = (Redirection *)malloc(MAX_REDIRECTS * sizeof(Redirection));
+    cmd->num_redirects = 0;
     
-    if (cmd->args == NULL || cmd->quoted == NULL) {
+    if (cmd->args == NULL || cmd->quoted == NULL || cmd->redirects == NULL) {
         perror("malloc failed for args");
         free(cmd->args);
         free(cmd->quoted);
+        free(cmd->redirects);
         free(cmd);
         return NULL;
     }
@@ -89,15 +92,122 @@ Command* parse_command(const char *input) {
     }
     
     int pos = 0;
-    while (cmd->count < MAX_ARGS - 1) {
-        int was_quoted = 0;
-        char *token = extract_token_with_quotes(input, &pos, &was_quoted);
-        if (token == NULL) {
-            break;
+    while (pos < (int)strlen(input)) {
+        while (input[pos] && is_whitespace(input[pos])) {
+            pos++;
         }
-        cmd->args[cmd->count] = token;
-        cmd->quoted[cmd->count] = was_quoted;
-        cmd->count++;
+        
+        if (!input[pos]) break;
+        
+        if (input[pos] == '>') {
+            if (cmd->num_redirects >= MAX_REDIRECTS) break;
+            
+            pos++;
+            
+            RedirectType type = REDIRECT_OUT;
+            if (input[pos] == '>') {
+                type = REDIRECT_APPEND;
+                pos++;
+            }
+            
+            while (input[pos] && is_whitespace(input[pos])) {
+                pos++;
+            }
+            
+            int filename_start = pos;
+            while (input[pos] && !is_whitespace(input[pos]) && input[pos] != '>' && input[pos] != '<') {
+                pos++;
+            }
+            
+            int filename_len = pos - filename_start;
+            char *filename = (char *)malloc(filename_len + 1);
+            if (filename == NULL) {
+                perror("malloc failed for filename");
+                break;
+            }
+            
+            strncpy(filename, &input[filename_start], filename_len);
+            filename[filename_len] = '\0';
+            
+            cmd->redirects[cmd->num_redirects].type = type;
+            cmd->redirects[cmd->num_redirects].filename = filename;
+            cmd->num_redirects++;
+            
+        } else if (input[pos] == '<') {
+            if (cmd->num_redirects >= MAX_REDIRECTS) break;
+            
+            pos++;
+            
+            while (input[pos] && is_whitespace(input[pos])) {
+                pos++;
+            }
+            
+            int filename_start = pos;
+            while (input[pos] && !is_whitespace(input[pos]) && input[pos] != '>' && input[pos] != '<') {
+                pos++;
+            }
+            
+            int filename_len = pos - filename_start;
+            char *filename = (char *)malloc(filename_len + 1);
+            if (filename == NULL) {
+                perror("malloc failed for filename");
+                break;
+            }
+            
+            strncpy(filename, &input[filename_start], filename_len);
+            filename[filename_len] = '\0';
+            
+            cmd->redirects[cmd->num_redirects].type = REDIRECT_IN;
+            cmd->redirects[cmd->num_redirects].filename = filename;
+            cmd->num_redirects++;
+            
+        } else if (input[pos] == '2' && input[pos+1] == '>') {
+            if (cmd->num_redirects >= MAX_REDIRECTS) break;
+            
+            pos += 2;
+            
+            RedirectType type = REDIRECT_ERR;
+            if (input[pos] == '>') {
+                type = REDIRECT_ERR_APPEND;
+                pos++;
+            }
+            
+            while (input[pos] && is_whitespace(input[pos])) {
+                pos++;
+            }
+            
+            int filename_start = pos;
+            while (input[pos] && !is_whitespace(input[pos]) && input[pos] != '>' && input[pos] != '<') {
+                pos++;
+            }
+            
+            int filename_len = pos - filename_start;
+            char *filename = (char *)malloc(filename_len + 1);
+            if (filename == NULL) {
+                perror("malloc failed for filename");
+                break;
+            }
+            
+            strncpy(filename, &input[filename_start], filename_len);
+            filename[filename_len] = '\0';
+            
+            cmd->redirects[cmd->num_redirects].type = type;
+            cmd->redirects[cmd->num_redirects].filename = filename;
+            cmd->num_redirects++;
+            
+        } else {
+            int was_quoted = 0;
+            char *token = extract_token_with_quotes(input, &pos, &was_quoted);
+            if (token == NULL) {
+                continue;
+            }
+            
+            if (cmd->count < MAX_ARGS - 1) {
+                cmd->args[cmd->count] = token;
+                cmd->quoted[cmd->count] = was_quoted;
+                cmd->count++;
+            }
+        }
     }
     
     cmd->args[cmd->count] = NULL;
@@ -105,13 +215,11 @@ Command* parse_command(const char *input) {
     return cmd;
 }
 
-// Parse input string by pipes and return array of commands
 Command** parse_pipeline(const char *input, int *num_commands) {
     if (input == NULL || num_commands == NULL) {
         return NULL;
     }
     
-    // Allocate array of command pointers
     Command **commands = (Command **)malloc(MAX_COMMANDS * sizeof(Command *));
     if (commands == NULL) {
         perror("malloc failed for commands");
@@ -122,10 +230,8 @@ Command** parse_pipeline(const char *input, int *num_commands) {
     int i = 0;
     
     while (input[i] && *num_commands < MAX_COMMANDS) {
-        // Find next pipe or end of string
         int pipe_pos = i;
         while (input[pipe_pos] && input[pipe_pos] != '|') {
-            // Skip quoted sections to avoid splitting on pipes inside quotes
             if (input[pipe_pos] == '\'') {
                 pipe_pos++;
                 while (input[pipe_pos] && input[pipe_pos] != '\'') {
@@ -139,7 +245,6 @@ Command** parse_pipeline(const char *input, int *num_commands) {
             }
         }
         
-        // Extract substring from i to pipe_pos
         int cmd_len = pipe_pos - i;
         char *cmd_str = (char *)malloc(cmd_len + 1);
         if (cmd_str == NULL) {
@@ -151,7 +256,6 @@ Command** parse_pipeline(const char *input, int *num_commands) {
         strncpy(cmd_str, &input[i], cmd_len);
         cmd_str[cmd_len] = '\0';
         
-        // Parse this command
         Command *cmd = parse_command(cmd_str);
         free(cmd_str);
         
@@ -162,7 +266,6 @@ Command** parse_pipeline(const char *input, int *num_commands) {
             free_command(cmd);
         }
         
-        // Skip pipe character if present
         if (input[pipe_pos] == '|') {
             i = pipe_pos + 1;
         } else {
@@ -183,6 +286,22 @@ void print_tokens(const Command *cmd) {
     for (int i = 0; i < cmd->count; i++) {
         printf("  [%d] '%s'%s\n", i, cmd->args[i], cmd->quoted[i] ? " (quoted)" : "");
     }
+    
+    if (cmd->num_redirects > 0) {
+        printf("Redirections (%d):\n", cmd->num_redirects);
+        for (int i = 0; i < cmd->num_redirects; i++) {
+            const char *type_str = "NONE";
+            switch (cmd->redirects[i].type) {
+                case REDIRECT_IN: type_str = "<"; break;
+                case REDIRECT_OUT: type_str = ">"; break;
+                case REDIRECT_APPEND: type_str = ">>"; break;
+                case REDIRECT_ERR: type_str = "2>"; break;
+                case REDIRECT_ERR_APPEND: type_str = "2>>"; break;
+                default: break;
+            }
+            printf("  %s %s\n", type_str, cmd->redirects[i].filename);
+        }
+    }
 }
 
 void free_command(Command *cmd) {
@@ -195,8 +314,16 @@ void free_command(Command *cmd) {
             free(cmd->args[i]);
         }
     }
+    
+    for (int i = 0; i < cmd->num_redirects; i++) {
+        if (cmd->redirects[i].filename != NULL) {
+            free(cmd->redirects[i].filename);
+        }
+    }
+    
     free(cmd->args);
     free(cmd->quoted);
+    free(cmd->redirects);
     free(cmd);
 }
 
