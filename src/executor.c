@@ -247,6 +247,15 @@ void sigchld_handler(int sig) {
     }
 }
 
+void sigint_handler(int sig) {
+    (void)sig;
+}
+
+void sigtstp_handler(int sig) {
+    (void)sig;
+}
+
+
 int execute_builtin(Command *cmd) {
     if (cmd == NULL || cmd->count == 0) {
         return 1;

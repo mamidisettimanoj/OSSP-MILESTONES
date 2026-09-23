@@ -103,6 +103,8 @@ void run_shell(void) {
     history_init();
     job_table_init();
     signal(SIGCHLD, sigchld_handler);
+    signal(SIGINT, sigint_handler);
+    signal(SIGTSTP, sigtstp_handler);
     
     printf("ShellForge - Simple Unix Shell\n");
     printf("Type 'exit' to quit. Use UP/DOWN arrows for history.\n\n");

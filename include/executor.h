@@ -29,3 +29,6 @@ int execute_foreground(int job_id);
 int execute_background(int job_id);
 
 void sigchld_handler(int sig);
+
+void sigint_handler(int sig);
+void sigtstp_handler(int sig);
