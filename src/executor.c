@@ -135,6 +135,7 @@ int is_builtin(const char *cmd) {
     if (strcmp(cmd, "history") == 0) return 1;
     if (strcmp(cmd, "jobs") == 0) return 1;
     if (strcmp(cmd, "fg") == 0) return 1;
+    if (strcmp(cmd, "bg") == 0) return 1;
     
     return 0;
 }
@@ -156,6 +157,29 @@ int execute_builtin_history(Command *cmd) {
         printf("%3d  %s\n", i, shell_history.commands[i]);
     }
     
+    return 0;
+}
+
+int execute_background(int job_id) {
+    Job *job = find_job_by_id(job_id);
+    
+    if (job == NULL) {
+        fprintf(stderr, "bg: job %d not found\n", job_id);
+        return 1;
+    }
+    
+    // If the job is stopped, send SIGCONT to resume it
+    if (job->status == JOB_STOPPED) {
+        if (kill(job->pid, SIGCONT) == -1) {
+            perror("kill SIGCONT failed");
+            return 1;
+        }
+    }
+    
+    printf("[%d]+ Continued            %s\n", job->job_id, job->command);
+    job->status = JOB_RUNNING;
+    
+    // DON'T wait — shell returns to prompt immediately
     return 0;
 }
 
@@ -294,6 +318,28 @@ int execute_builtin(Command *cmd) {
         }
         
         return execute_foreground(job_id);
+    }
+
+    if (strcmp(builtin, "bg") == 0) {
+        int job_id = 1;
+        
+        if (cmd->count > 1) {
+            const char *arg = cmd->args[1];
+            if (arg[0] == '%') {
+                job_id = atoi(&arg[1]);
+            } else {
+                job_id = atoi(arg);
+            }
+        } else {
+            if (job_table.num_jobs > 0) {
+                job_id = job_table.jobs[job_table.num_jobs - 1].job_id;
+            } else {
+                fprintf(stderr, "bg: no jobs\n");
+                return 1;
+            }
+        }
+        
+        return execute_background(job_id);
     }
     
     printf("Built-in '%s' not yet implemented\n", builtin);

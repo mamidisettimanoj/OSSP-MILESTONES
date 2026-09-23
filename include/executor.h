@@ -25,3 +25,5 @@ int setup_redirections(Command *cmd);
 int execute_foreground(int job_id);
 
 int execute_foreground(int job_id);
+
+int execute_background(int job_id);
