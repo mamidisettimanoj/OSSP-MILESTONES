@@ -27,3 +27,5 @@ int execute_foreground(int job_id);
 int execute_foreground(int job_id);
 
 int execute_background(int job_id);
+
+void sigchld_handler(int sig);

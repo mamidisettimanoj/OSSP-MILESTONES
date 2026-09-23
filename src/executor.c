@@ -226,6 +226,27 @@ int execute_foreground(int job_id) {
     return 0;
 }
 
+void sigchld_handler(int sig) {
+    (void)sig;
+    
+    int status;
+    pid_t pid;
+    
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        Job *job = find_job_by_pid(pid);
+        
+        if (job != NULL) {
+            if (WIFEXITED(status)) {
+                printf("[%d]+  Done                    %s\n", job->job_id, job->command);
+            } else if (WIFSIGNALED(status)) {
+                int sig_num = WTERMSIG(status);
+                printf("[%d]+  Terminated by signal %d %s\n", job->job_id, sig_num, job->command);
+            }
+            remove_job(job->job_id);
+        }
+    }
+}
+
 int execute_builtin(Command *cmd) {
     if (cmd == NULL || cmd->count == 0) {
         return 1;

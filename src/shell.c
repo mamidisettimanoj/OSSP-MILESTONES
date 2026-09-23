@@ -102,13 +102,13 @@ char* read_input_with_history(void) {
 void run_shell(void) {
     history_init();
     job_table_init();
+    signal(SIGCHLD, sigchld_handler);
     
     printf("ShellForge - Simple Unix Shell\n");
     printf("Type 'exit' to quit. Use UP/DOWN arrows for history.\n\n");
     
     while (1) {
         // Check for finished background jobs
-        check_background_jobs();
         
         display_prompt();
         char *input = read_input_with_history();
