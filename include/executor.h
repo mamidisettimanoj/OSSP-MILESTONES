@@ -21,3 +21,7 @@ int is_absolute_path(const char *path);
 int setup_redirections(Command *cmd);
 
 #endif
+
+int execute_foreground(int job_id);
+
+int execute_foreground(int job_id);

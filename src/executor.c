@@ -134,6 +134,7 @@ int is_builtin(const char *cmd) {
     if (strcmp(cmd, "export") == 0) return 1;
     if (strcmp(cmd, "history") == 0) return 1;
     if (strcmp(cmd, "jobs") == 0) return 1;
+    if (strcmp(cmd, "fg") == 0) return 1;
     
     return 0;
 }
@@ -155,6 +156,49 @@ int execute_builtin_history(Command *cmd) {
         printf("%3d  %s\n", i, shell_history.commands[i]);
     }
     
+    return 0;
+}
+
+int execute_foreground(int job_id) {
+    Job *job = find_job_by_id(job_id);
+    
+    if (job == NULL) {
+        fprintf(stderr, "fg: job %d not found\n", job_id);
+        return 1;
+    }
+    
+    // If the job is stopped, send SIGCONT to resume it
+    if (job->status == JOB_STOPPED) {
+        if (kill(job->pid, SIGCONT) == -1) {
+            perror("kill SIGCONT failed");
+            return 1;
+        }
+    }
+    
+    printf("[%d]+ Resumed            %s\n", job->job_id, job->command);
+    job->status = JOB_RUNNING;
+    
+    // Wait for the foreground job to complete
+    int status;
+    if (waitpid(job->pid, &status, 0) == -1) {
+        perror("waitpid failed");
+        return 1;
+    }
+    
+    // Print completion status
+    if (WIFEXITED(status)) {
+        printf("[%d]+  Done                    %s\n", job->job_id, job->command);
+        int exit_code = WEXITSTATUS(status);
+        remove_job(job->job_id);
+        return exit_code;
+    } else if (WIFSIGNALED(status)) {
+        int sig = WTERMSIG(status);
+        printf("[%d]+  Terminated by signal %d %s\n", job->job_id, sig, job->command);
+        remove_job(job->job_id);
+        return 1;
+    }
+    
+    remove_job(job->job_id);
     return 0;
 }
 
@@ -228,6 +272,28 @@ int execute_builtin(Command *cmd) {
     if (strcmp(builtin, "jobs") == 0) {
         print_jobs();
         return 0;
+    }
+
+    if (strcmp(builtin, "fg") == 0) {
+        int job_id = 1;
+        
+        if (cmd->count > 1) {
+            const char *arg = cmd->args[1];
+            if (arg[0] == '%') {
+                job_id = atoi(&arg[1]);
+            } else {
+                job_id = atoi(arg);
+            }
+        } else {
+            if (job_table.num_jobs > 0) {
+                job_id = job_table.jobs[job_table.num_jobs - 1].job_id;
+            } else {
+                fprintf(stderr, "fg: no jobs\n");
+                return 1;
+            }
+        }
+        
+        return execute_foreground(job_id);
     }
     
     printf("Built-in '%s' not yet implemented\n", builtin);
