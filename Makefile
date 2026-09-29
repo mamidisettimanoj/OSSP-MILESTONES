@@ -7,8 +7,8 @@ all: $(TARGETS)
 src/session1: src/session1.c
 	$(CC) $(CFLAGS) -o src/session1 src/session1.c
 
-src/shell: src/shell.c src/history.c src/parser.c src/executor.c src/expander.c src/job.c src/builtin.c
-	$(CC) $(CFLAGS) -o src/shell src/shell.c src/history.c src/parser.c src/executor.c src/expander.c src/job.c src/builtin.c
+src/shell: src/shell.c src/history.c src/parser.c src/executor.c src/expander.c src/job.c src/builtin.c src/token.c src/lexer.c
+	$(CC) $(CFLAGS) -o src/shell src/shell.c src/history.c src/parser.c src/executor.c src/expander.c src/job.c src/builtin.c src/token.c src/lexer.c
 
 clean:
 	rm -f $(TARGETS)
