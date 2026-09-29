@@ -1,3 +1,4 @@
+#include "builtin.h"
 #include "../include/executor.h"
 #include "../include/expander.h"
 #include "../include/history.h"
@@ -125,41 +126,6 @@ int setup_redirections(Command *cmd) {
     return 0;
 }
 
-int is_builtin(const char *cmd) {
-    if (cmd == NULL) return 0;
-    
-    if (strcmp(cmd, "cd") == 0) return 1;
-    if (strcmp(cmd, "pwd") == 0) return 1;
-    if (strcmp(cmd, "exit") == 0) return 1;
-    if (strcmp(cmd, "export") == 0) return 1;
-    if (strcmp(cmd, "history") == 0) return 1;
-    if (strcmp(cmd, "jobs") == 0) return 1;
-    if (strcmp(cmd, "fg") == 0) return 1;
-    if (strcmp(cmd, "bg") == 0) return 1;
-    
-    return 0;
-}
-
-int execute_builtin_history(Command *cmd) {
-    int start_index = 0;
-    
-    if (cmd->count > 1) {
-        int num_commands = atoi(cmd->args[1]);
-        if (num_commands > 0) {
-            start_index = shell_history.count - num_commands;
-            if (start_index < 0) {
-                start_index = 0;
-            }
-        }
-    }
-    
-    for (int i = start_index; i < shell_history.count; i++) {
-        printf("%3d  %s\n", i, shell_history.commands[i]);
-    }
-    
-    return 0;
-}
-
 int execute_background(int job_id) {
     Job *job = find_job_by_id(job_id);
     
@@ -253,127 +219,6 @@ void sigint_handler(int sig) {
 
 void sigtstp_handler(int sig) {
     (void)sig;
-}
-
-
-int execute_builtin(Command *cmd) {
-    if (cmd == NULL || cmd->count == 0) {
-        return 1;
-    }
-    
-    const char *builtin = cmd->args[0];
-    
-    if (strcmp(builtin, "pwd") == 0) {
-        char cwd[1024];
-        if (getcwd(cwd, sizeof(cwd)) != NULL) {
-            printf("%s\n", cwd);
-        } else {
-            perror("getcwd");
-            return 1;
-        }
-        return 0;
-    }
-    
-    if (strcmp(builtin, "cd") == 0) {
-        const char *target = NULL;
-        
-        if (cmd->count < 2) {
-            target = getenv("HOME");
-            if (target == NULL) {
-                fprintf(stderr, "cd: HOME not set\n");
-                return 1;
-            }
-        } else {
-            target = cmd->args[1];
-        }
-        
-        char *expanded = expand_cd_path(target);
-        if (expanded == NULL) {
-            return 1;
-        }
-        
-        char current_dir[1024];
-        if (getcwd(current_dir, sizeof(current_dir)) != NULL) {
-            strcpy(previous_dir, current_dir);
-        }
-        
-        if (chdir(expanded) != 0) {
-            perror("cd failed");
-            free(expanded);
-            return 1;
-        }
-        
-        free(expanded);
-        return 0;
-    }
-    
-    if (strcmp(builtin, "exit") == 0) {
-        int status = 0;
-        
-        if (cmd->count > 1) {
-            status = atoi(cmd->args[1]);
-        }
-        
-        printf("Goodbye!\n");
-        exit(status);
-        return 0;
-    }
-    
-    if (strcmp(builtin, "history") == 0) {
-        return execute_builtin_history(cmd);
-    }
-    
-    if (strcmp(builtin, "jobs") == 0) {
-        print_jobs();
-        return 0;
-    }
-
-    if (strcmp(builtin, "fg") == 0) {
-        int job_id = 1;
-        
-        if (cmd->count > 1) {
-            const char *arg = cmd->args[1];
-            if (arg[0] == '%') {
-                job_id = atoi(&arg[1]);
-            } else {
-                job_id = atoi(arg);
-            }
-        } else {
-            if (job_table.num_jobs > 0) {
-                job_id = job_table.jobs[job_table.num_jobs - 1].job_id;
-            } else {
-                fprintf(stderr, "fg: no jobs\n");
-                return 1;
-            }
-        }
-        
-        return execute_foreground(job_id);
-    }
-
-    if (strcmp(builtin, "bg") == 0) {
-        int job_id = 1;
-        
-        if (cmd->count > 1) {
-            const char *arg = cmd->args[1];
-            if (arg[0] == '%') {
-                job_id = atoi(&arg[1]);
-            } else {
-                job_id = atoi(arg);
-            }
-        } else {
-            if (job_table.num_jobs > 0) {
-                job_id = job_table.jobs[job_table.num_jobs - 1].job_id;
-            } else {
-                fprintf(stderr, "bg: no jobs\n");
-                return 1;
-            }
-        }
-        
-        return execute_background(job_id);
-    }
-    
-    printf("Built-in '%s' not yet implemented\n", builtin);
-    return 1;
 }
 
 int execute_pipeline(Command **commands, int num_commands) {

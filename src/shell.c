@@ -2,6 +2,7 @@
 #include "../include/history.h"
 #include "../include/parser.h"
 #include "../include/executor.h"
+#include "../include/builtin.h"
 #include "../include/job.h"
 #include <termios.h>
 

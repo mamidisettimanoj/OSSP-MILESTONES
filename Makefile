@@ -1,6 +1,5 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -g -I./include
-
 TARGETS = src/session1 src/shell
 
 all: $(TARGETS)
@@ -8,8 +7,8 @@ all: $(TARGETS)
 src/session1: src/session1.c
 	$(CC) $(CFLAGS) -o src/session1 src/session1.c
 
-src/shell: src/shell.c src/history.c src/parser.c src/executor.c src/expander.c src/job.c
-	$(CC) $(CFLAGS) -o src/shell src/shell.c src/history.c src/parser.c src/executor.c src/expander.c src/job.c
+src/shell: src/shell.c src/history.c src/parser.c src/executor.c src/expander.c src/job.c src/builtin.c
+	$(CC) $(CFLAGS) -o src/shell src/shell.c src/history.c src/parser.c src/executor.c src/expander.c src/job.c src/builtin.c
 
 clean:
 	rm -f $(TARGETS)
